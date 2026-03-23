@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Bursa Dart Challenge — Canlı İzleme</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+/* ===================== RESET & VARIABLES ===================== */
+:root {
+  --bg:      #0a0a0a; --bg1:  #111111; --bg2: #161616;
+  --card:    #1a1a1a; --card2: #202020;
+  --border:  #2e2e2e; --border2: #444444;
+  --accent:  #e03030; --adim: #a02020;
+  --accent2: #c0c0c0; --accent3: #ffffff;
+  --text:    #f0f0f0; --text2: #888888;
+  --danger:  #e03030; --green: #22c55e; --yellow: #f59e0b;
+  --mono:    'Rajdhani', sans-serif;
+}
+:root.light {
+  --bg:      #f4f4f4; --bg1:  #ffffff; --bg2: #ececec;
+  --card:    #ffffff; --card2: #f8f8f8;
+  --border:  #dcdcdc; --border2: #bbbbbb;
+  --accent:  #cc1f1f; --adim: #991515;
+  --accent2: #555555; --accent3: #111111;
+  --text:    #111111; --text2: #666666;
+  --danger:  #cc1f1f;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.02em;min-height:100vh;overflow-x:hidden}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg1)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ===================== HEADER ===================== */
+#app-header{background:#0d0d0d;border-bottom:2px solid var(--accent);position:sticky;top:0;z-index:100}
+:root.light #app-header{background:#fff}
+.header-top{display:flex;align-items:center;justify-content:space-between;padding:.7rem 1.2rem;gap:.8rem;flex-wrap:wrap}
+.header-title{display:flex;align-items:center;gap:.7rem}
+#app-logo{width:44px;height:44px;object-fit:contain;border-radius:4px;flex-shrink:0}
+.app-title{color:#fff;font-family:'Bebas Neue',sans-serif;font-size:clamp(1.2rem,3vw,1.9rem);letter-spacing:.05em;line-height:1}
+:root.light .app-title{color:#111}
+.app-subtitle{color:var(--text2);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase}
+.header-actions{display:flex;align-items:center;gap:.5rem}
+.live-badge{padding:.25rem .7rem;border-radius:3px;font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.live-badge.online{background:var(--accent);color:#fff;animation:blink 2s infinite}
+.live-badge.offline{background:#333;color:#888}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* ===================== NAV ===================== */
+#nav-tabs{display:flex;border-top:1px solid var(--border);overflow-x:auto;background:#0d0d0d}
+:root.light #nav-tabs{background:#fff}
+.nav-tab{padding:.65rem 1.3rem;background:none;border:none;color:var(--text2);cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:.78rem;letter-spacing:.09em;text-transform:uppercase;border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.nav-tab:hover:not(.active){color:var(--text);background:rgba(255,255,255,.03)}
+
+/* ===================== MAIN ===================== */
+#main-content{max-width:1400px;margin:0 auto;padding:1.4rem}
+@media(max-width:800px){#main-content{padding:.8rem}}
+.view{display:none}.view.active{display:block}
+
+/* ===================== CARDS ===================== */
+.card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:1.2rem;margin-bottom:1.2rem}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;padding-bottom:.6rem;border-bottom:1px solid var(--border)}
+.card-title{color:var(--accent);font-size:.78rem;letter-spacing:.12em;text-transform:uppercase;display:flex;align-items:center;gap:.4rem}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1.2rem}
+@media(max-width:800px){.grid-2{grid-template-columns:1fr}}
+
+/* ===================== STANDINGS TABLE ===================== */
+.standings-table{width:100%;border-collapse:collapse;font-size:.82rem}
+.standings-table th{background:var(--bg1);color:var(--accent);padding:.4rem .6rem;text-align:center;font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid var(--border)}
+.standings-table th:first-child,.standings-table td:first-child{text-align:left}
+.standings-table td{padding:.4rem .6rem;text-align:center;border-bottom:1px solid var(--border)}
+.standings-table tr:last-child td{border-bottom:none}
+.standings-table tr.advancing{background:rgba(224,48,48,.07)}
+.standings-table tr.advancing td:first-child::after{content:' ✓';color:var(--accent);font-size:.7rem}
+:root.light .standings-table tr.advancing{background:rgba(204,31,31,.06)}
+
+/* ===================== MATCH ITEMS ===================== */
+.match-list{display:flex;flex-direction:column;gap:.4rem}
+.match-item{display:grid;grid-template-columns:8px auto auto 1fr auto 1fr;align-items:center;gap:.4rem;padding:.45rem .7rem;background:var(--bg1);border:1px solid var(--border);border-radius:4px;font-size:.8rem}
+.match-item .p1{text-align:right;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.match-item .p2{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.match-score{font-size:.95rem;font-weight:bold;color:var(--text2);min-width:2.8rem;text-align:center}
+.match-score.played{color:var(--accent3)}
+.match-item.done-match{border-color:var(--green)}
+.match-item.active-match{border-color:var(--yellow);box-shadow:0 0 0 2px rgba(245,158,11,.2)}
+.match-item.match-winner-p1 .p1{color:var(--accent)}
+.match-item.match-winner-p2 .p2{color:var(--accent)}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.done{background:var(--green)}
+.status-dot.live{background:var(--yellow);animation:pulse-dot .8s infinite}
+.status-dot.idle{background:#6b7280}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ===================== GROUPS LAYOUT ===================== */
+.groups-layout{display:grid;grid-template-columns:minmax(200px,1fr) minmax(260px,2fr);gap:1rem;align-items:start}
+@media(max-width:700px){.groups-layout{grid-template-columns:1fr}}
+
+/* ===================== BRACKET ===================== */
+#bracket-container{overflow-x:auto;padding-bottom:.5rem}
+.bracket-wrapper{display:flex;gap:0;align-items:stretch;min-width:max-content}
+.bracket-round{display:flex;flex-direction:column;min-width:185px}
+.bracket-round-header{text-align:center;color:var(--accent);font-size:.67rem;letter-spacing:.12em;text-transform:uppercase;padding:.4rem;border-bottom:1px solid var(--border);background:rgba(224,48,48,.05)}
+.bracket-matches-col{display:flex;flex-direction:column;flex:1;justify-content:space-around;padding:.4rem;gap:.35rem}
+.bracket-match{background:var(--card2);border:1px solid var(--border);border-radius:6px;overflow:hidden}
+.bracket-match.done-match{border-color:var(--green);box-shadow:0 0 0 1px rgba(34,197,94,.15)}
+.bracket-match.active{border-color:var(--yellow);box-shadow:0 0 0 1px rgba(245,158,11,.2)}
+.bracket-player{display:flex;align-items:center;justify-content:space-between;padding:.42rem .6rem;font-size:.78rem;border-bottom:1px solid var(--border)}
+.bracket-player:last-child{border-bottom:none}
+.bracket-player.winner{background:rgba(224,48,48,.15);color:var(--accent)}
+.bracket-player.loser{opacity:.4}
+.bracket-player.tbd{color:var(--text2);font-style:italic}
+.bracket-player.bye-p{opacity:.3;font-style:italic}
+.bracket-player-score{font-weight:bold;color:var(--accent3);min-width:1.4rem;text-align:center}
+.bracket-section-title{color:var(--accent2);font-size:.7rem;letter-spacing:.15em;text-transform:uppercase;padding:.5rem 0;border-bottom:1px solid var(--border);margin-bottom:.5rem}
+.double-elim-container{display:flex;flex-direction:column;gap:1.2rem}
+:root.light .bracket-match{background:#f8f8f8}
+:root.light .bracket-player.winner{background:rgba(204,31,31,.1)}
+
+/* ===================== CHAMPION BANNER ===================== */
+.champion-banner{text-align:center;padding:1.5rem 1rem;background:linear-gradient(135deg,rgba(224,48,48,.12),rgba(255,255,255,.04));border:1px solid var(--accent);border-radius:8px;margin-bottom:1.2rem}
+.champion-banner .trophy{font-size:3rem}
+.champion-banner .champ-label{color:var(--text2);font-size:.74rem;letter-spacing:.2em;text-transform:uppercase;margin:.4rem 0}
+.champion-banner .champ-name{color:#fff;font-size:1.7rem;font-family:'Bebas Neue',sans-serif;text-shadow:0 0 20px rgba(224,48,48,.6)}
+:root.light .champion-banner{background:linear-gradient(135deg,rgba(204,31,31,.08),rgba(0,0,0,.03))}
+:root.light .champion-banner .champ-name{color:#111}
+
+/* ===================== STATS ===================== */
+.stats-table{width:100%;border-collapse:collapse;font-size:.88rem}
+.stats-table th{background:var(--bg1);color:var(--accent);padding:.5rem .7rem;font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;border-bottom:2px solid var(--accent)}
+.stats-table td{padding:.5rem .7rem;border-bottom:1px solid var(--border);text-align:center}
+.stats-table td:first-child,.stats-table th:first-child{text-align:left}
+.stats-table tr:hover td{background:rgba(255,255,255,.015)}
+.stats-table .champ-row td{background:rgba(255,214,0,.05);color:var(--accent3)}
+
+/* ===================== BOARD BADGE ===================== */
+.board-badge{font-size:.62rem;font-weight:700;color:#fff;padding:.05rem .35rem;border-radius:3px;white-space:nowrap}
+.group-badge{font-size:.65rem;color:var(--text2);white-space:nowrap}
+
+/* ===================== MISC ===================== */
+.empty-state{text-align:center;padding:2.5rem 1rem;color:var(--text2)}
+.empty-state .icon{font-size:2.4rem;margin-bottom:.6rem}
+.empty-state p{font-size:.8rem}
+.btn{padding:.45rem .9rem;border:none;border-radius:4px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:700;font-size:.75rem;letter-spacing:.07em;text-transform:uppercase;transition:all .15s}
+.btn-secondary{background:var(--card2);color:var(--text);border:1px solid var(--border2)}
+.btn-secondary:hover{border-color:var(--accent);color:var(--accent)}
+.btn-sm{padding:.28rem .55rem;font-size:.68rem}
+.badge{display:inline-block;padding:.15rem .4rem;border-radius:3px;font-size:.65rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.badge-green{background:rgba(34,197,94,.15);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.mode-tabs{display:flex;gap:.35rem;flex-wrap:wrap;margin-bottom:.8rem}
+.mode-tab-btn{padding:.28rem .65rem;border:1px solid var(--border2);border-radius:4px;cursor:pointer;color:var(--text2);background:var(--bg1);font-family:'Rajdhani',sans-serif;font-size:.73rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase}
+.mode-tab-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+:root.light ::-webkit-scrollbar-track{background:#efefef}
+:root.light ::-webkit-scrollbar-thumb{background:#ccc}
+</style>
+</head>
+<body>
+<header id="app-header">
+  <div class="header-top">
+    <div class="header-title">
+      <img id="app-logo" src="" alt="BDC">
+      <div>
+        <div class="app-title">BURSA DART CHALLENGE</div>
+        <div class="app-subtitle">Canlı İzleme</div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-sm" id="theme-btn" onclick="toggleTheme()" title="Tema">🌙</button>
+      <span id="live-badge" class="live-badge offline">⏳ Bağlanıyor</span>
+    </div>
+  </div>
+  <nav id="nav-tabs">
+    <button class="nav-tab active" data-view="groups"  onclick="switchTab('groups')">⊞ Gruplar</button>
+    <button class="nav-tab"        data-view="bracket" onclick="switchTab('bracket')">⊡ Turnuva</button>
+    <button class="nav-tab"        data-view="stats"   onclick="switchTab('stats')">◫ İstatistikler</button>
+  </nav>
+</header>
+
+<div id="main-content">
+  <div id="view-groups"  class="view active"><div class="empty-state"><div class="icon">📡</div><p>Yayın bekleniyor…</p></div></div>
+  <div id="view-bracket" class="view"><div class="empty-state"><div class="icon">📡</div><p>Yayın bekleniyor…</p></div></div>
+  <div id="view-stats"   class="view"><div class="empty-state"><div class="icon">📡</div><p>Yayın bekleniyor…</p></div></div>
+</div>
+
+<script>
+/* ===================== FIREBASE CONFIG ===================== */
+const _FB_CONFIG = {
+  apiKey: "AIzaSyCvovoMBThfpP3VZnzrlhlWrbdKk8cwJ-s",
+  authDomain: "bursa-dart-challenge.firebaseapp.com",
+  databaseURL: "https://bursa-dart-challenge-default-rtdb.firebaseio.com",
+  projectId: "bursa-dart-challenge",
+  storageBucket: "bursa-dart-challenge.firebasestorage.app",
+  messagingSenderId: "601796841343",
+  appId: "1:601796841343:web:bdde88f976cf803ed5d44a"
+};
+
+/* ===================== STATE ===================== */
+let App = { players:[], pots:{1:[],2:[],3:[],4:[]}, groups:[], advancingPlayers:[], bracket:null,
+            playerStats:{}, champion:null, phase:'setup', config:{advancePerGroup:2, tournamentType:'single'} };
+let _tab = 'groups';
+let _statsMode = 'groups';
+
+/* ===================== UTILITIES ===================== */
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const blankStat = () => ({ totalDarts:0, totalKalan:0, avgCount:0, avg:0, s180:0, highOut:0, wins:0, losses:0, legsWon:0, legsLost:0 });
+
+/* ===================== TAB SWITCHING ===================== */
+function switchTab(t) {
+  _tab = t;
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.toggle('active', el.dataset.view === t));
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-' + t).classList.add('active');
+}
+
+/* ===================== THEME ===================== */
+function toggleTheme() {
+  const root = document.documentElement;
+  const btn  = document.getElementById('theme-btn');
+  if (root.classList.contains('light')) {
+    root.classList.remove('light');
+    btn.textContent = '🌙';
+    localStorage.setItem('viewer-theme','dark');
+  } else {
+    root.classList.add('light');
+    btn.textContent = '☀️';
+    localStorage.setItem('viewer-theme','light');
+  }
+}
+(function(){
+  if (localStorage.getItem('viewer-theme') === 'light') {
+    document.documentElement.classList.add('light');
+    const btn = document.getElementById('theme-btn');
+    if (btn) btn.textContent = '☀️';
+  }
+})();
+
+/* ===================== FIREBASE LISTENER ===================== */
+window.addEventListener('load', function() {
+  if (typeof firebase === 'undefined') {
+    document.getElementById('live-badge').textContent = '❌ Firebase yüklenemedi';
+    return;
+  }
+  try {
+    firebase.initializeApp(_FB_CONFIG);
+    const db = firebase.database();
+    db.ref('tournament').on('value', function(snap) {
+      const data = snap.val();
+      const badge = document.getElementById('live-badge');
+      if (data) {
+        // Restore state
+        App = Object.assign({ players:[], pots:{1:[],2:[],3:[],4:[]}, groups:[], advancingPlayers:[],
+                               bracket:null, playerStats:{}, champion:null, phase:'setup',
+                               config:{advancePerGroup:2, tournamentType:'single'} }, data);
+        badge.className = 'live-badge online';
+        badge.textContent = '🔴 CANLI';
+        renderAll();
+      } else {
+        badge.className = 'live-badge offline';
+        badge.textContent = '⏳ Yayın yok';
+      }
+    });
+  } catch(e) {
+    document.getElementById('live-badge').textContent = '❌ Bağlantı hatası';
+    console.error(e);
+  }
+});
+
+function renderAll() {
+  renderGroups();
+  renderBracket();
+  renderStats();
+}
+
+/* ===================== CALC STANDINGS ===================== */
+function calcStandings(g) {
+  const s = {};
+  (g.players||[]).forEach(p => { s[p] = { p, w:0, l:0, lw:0, ll:0, pts:0 }; });
+  (g.matches||[]).forEach(m => {
+    if (!m.winner) return;
+    if (!s[m.player1] || !s[m.player2]) return;
+    s[m.player1].lw += (m.score1||0); s[m.player1].ll += (m.score2||0);
+    s[m.player2].lw += (m.score2||0); s[m.player2].ll += (m.score1||0);
+    if (m.winner === m.player1) { s[m.player1].w++; s[m.player1].pts += 3; s[m.player2].l++; }
+    else                        { s[m.player2].w++; s[m.player2].pts += 3; s[m.player1].l++; }
+  });
+  return Object.values(s).sort((a,b) => {
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    const dA = a.lw-a.ll, dB = b.lw-b.ll;
+    if (dB !== dA) return dB - dA;
+    return b.lw - a.lw;
+  });
+}
+
+/* ===================== RENDER GROUPS ===================== */
+function renderGroups() {
+  const el = document.getElementById('view-groups');
+  const d  = App;
+  if (!d.groups || !d.groups.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">⏳</div><p>Gruplar henüz oluşturulmadı</p></div>';
+    return;
+  }
+  if (d.phase === 'bracket' && (!d.groups || !d.groups.length)) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">⊡</div><p>Turnuva başladı — Turnuva sekmesine bakın</p></div>';
+    return;
+  }
+
+  const adv = (d.config && d.config.advancePerGroup) || 2;
+  const boardColors = ['var(--accent)','var(--accent2)','var(--accent3)','#4caf50','#9c27b0','#00bcd4','#ff5722','#795548'];
+
+  // Standings column
+  const standingsHTML = d.groups.map(g => {
+    const st = calcStandings(g);
+    const rows = st.map((s,i) => `
+      <tr class="${i < adv ? 'advancing' : ''}">
+        <td>${i+1}</td><td>${esc(s.p)}</td>
+        <td>${s.w}</td><td>${s.l}</td><td>${s.lw}</td><td>${s.ll}</td>
+        <td style="color:var(--accent3)">${s.pts}</td>
+      </tr>`).join('');
+    return `<div style="margin-bottom:1rem">
+      <div style="font-size:.7rem;font-weight:bold;color:var(--accent);margin-bottom:.3rem">📋 ${esc(g.name)}</div>
+      <table class="standings-table">
+        <thead><tr><th>#</th><th>Oyuncu</th><th title="Galibiyet">G</th><th title="Mağlubiyet">M</th><th title="Leg G">LG</th><th title="Leg M">LM</th><th>Puan</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }).join('');
+
+  // Matches — build round structure like admin panel
+  const maxRounds = Math.max(...d.groups.map(g => {
+    const pr = Math.floor((g.players||[]).length / 2);
+    return pr > 0 ? Math.ceil((g.matches||[]).length / pr) : 0;
+  }));
+
+  const groupRounds2 = d.groups.map(g => {
+    const pr = Math.floor((g.players||[]).length / 2) || 1;
+    const rounds2 = [];
+    for (let r = 0; r < maxRounds; r++) rounds2.push((g.matches||[]).slice(r*pr, r*pr+pr));
+    return { g, rounds2 };
+  });
+  const maxPerRound = Math.max(...groupRounds2.map(gr => Math.max(...gr.rounds2.map(r => r.length), 0)), 0);
+
+  const allItems = [];
+  for (let r = 0; r < maxRounds; r++) {
+    for (let mi = 0; mi < maxPerRound; mi++) {
+      groupRounds2.forEach(({ g, rounds2 }) => {
+        const m = rounds2[r] && rounds2[r][mi];
+        if (m) allItems.push({ g, m });
+      });
+    }
+  }
+
+  const matchRows = allItems.map(({ g, m }) => {
+    const played   = !!m.winner;
+    const isActive = !played && m.active;
+    const wClass   = played ? (m.winner === m.player1 ? 'match-winner-p1' : 'match-winner-p2') : '';
+    const dotCls   = played ? 'done' : isActive ? 'live' : 'idle';
+    const bc       = boardColors[((m.board||1)-1) % boardColors.length];
+    const boardBadge = m.board ? `<span class="board-badge" style="background:${bc}">B${m.board}</span>` : '<span></span>';
+    const groupBadge = `<span class="group-badge">${esc(g.name)}</span>`;
+    const scoreHtml = played
+      ? `<span class="match-score played">${m.score1} – ${m.score2}</span>`
+      : isActive
+        ? `<span class="match-score" style="color:var(--yellow)">⚡</span>`
+        : `<span class="match-score">vs</span>`;
+    return `
+      <div class="match-item ${played?'done-match':''} ${isActive?'active-match':''} ${wClass}"
+           style="grid-template-columns:8px auto auto 1fr auto 1fr;gap:.35rem">
+        <span class="status-dot ${dotCls}"></span>
+        ${groupBadge}
+        ${boardBadge}
+        <span class="p1">${esc(m.player1||'?')}</span>
+        ${scoreHtml}
+        <span class="p2">${esc(m.player2||'?')}</span>
+      </div>`;
+  }).join('');
+
+  const total  = d.groups.reduce((s,g) => s + (g.matches||[]).length, 0);
+  const played = d.groups.reduce((s,g) => s + (g.matches||[]).filter(m=>m.winner).length, 0);
+
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.9rem;flex-wrap:wrap;gap:.4rem">
+      <span style="font-size:.75rem;color:var(--text2)">Oynanan: <strong style="color:var(--text)">${played}</strong> / ${total} maç</span>
+      ${d.phase==='bracket'?'<span class="badge badge-green">Turnuva Başladı ✓</span>':''}
+    </div>
+    <div class="groups-layout">
+      <div>
+        <div style="font-size:.66rem;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.5rem">Puan Tabloları</div>
+        ${standingsHTML}
+      </div>
+      <div>
+        <div style="font-size:.66rem;color:var(--accent);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.5rem">Maçlar</div>
+        <div class="match-list">${matchRows || '<div class="empty-state"><p>Maç bulunamadı</p></div>'}</div>
+      </div>
+    </div>`;
+}
+
+/* ===================== BRACKET FUNCTIONS ===================== */
+function roundNames(n) {
+  const names = ['Final','Yarı Final','Çeyrek Final','Son 16','Son 32','Son 64'];
+  return Array.from({length:n}, (_,i) => names[n-1-i] || `Tur ${i+1}`);
+}
+
+function drawBracketMatchReadOnly(m) {
+  if (!m) return '';
+  const p1 = m.player1 || null, p2 = m.player2 || null;
+  if (p1==='BYE' && p2==='BYE') return '';
+  const p1cls = m.winner ? (m.winner===p1?'winner':'loser') : (!p1?'tbd':p1==='BYE'?'bye-p':'');
+  const p2cls = m.winner ? (m.winner===p2?'winner':'loser') : (!p2?'tbd':p2==='BYE'?'bye-p':'');
+  const isActive = !m.winner && m.active;
+  const dotCls   = m.winner ? 'done' : isActive ? 'live' : 'idle';
+  const doneCls  = (m.winner && m.winner!=='BYE') ? 'done-match' : '';
+  const statusTxt = m.winner ? '✔ Bitti' : isActive ? '⚡ Oynanıyor' : '—';
+  const statusClr = m.winner ? 'var(--green)' : isActive ? 'var(--yellow)' : 'var(--text2)';
+  return `
+    <div class="bracket-match ${isActive?'active':''} ${doneCls}">
+      <div style="display:flex;align-items:center;gap:.3rem;padding:.18rem .5rem;border-bottom:1px solid var(--border);background:var(--bg)">
+        <span class="status-dot ${dotCls}"></span>
+        <span style="font-size:.6rem;color:${statusClr};flex:1">${statusTxt}</span>
+      </div>
+      <div class="bracket-player ${p1cls}">
+        <span>${esc(p1||'TBD')}</span>
+        <span class="bracket-player-score">${m.winner ? (m.score1||'') : ''}</span>
+      </div>
+      <div class="bracket-player ${p2cls}">
+        <span>${esc(p2||'TBD')}</span>
+        <span class="bracket-player-score">${m.winner ? (m.score2||'') : ''}</span>
+      </div>
+    </div>`;
+}
+
+function renderBracket() {
+  const el = document.getElementById('view-bracket');
+  const d  = App;
+
+  let html = '';
+
+  // Champion banner
+  if (d.champion) {
+    html += `<div class="champion-banner">
+      <div class="trophy">🏆</div>
+      <div class="champ-label">Bursa Dart Challenge Şampiyonu</div>
+      <div class="champ-name">${esc(d.champion)}</div>
+    </div>`;
+  }
+
+  if (!d.bracket) {
+    el.innerHTML = html || '<div class="empty-state"><div class="icon">⏳</div><p>Turnuva henüz başlamadı</p></div>';
+    return;
+  }
+
+  const br = d.bracket;
+  const isDouble = d.config && d.config.tournamentType === 'double';
+
+  if (!isDouble) {
+    // Single elimination
+    const rounds = br.winners || [];
+    const names  = roundNames(rounds.length);
+    html += '<div class="card"><div class="card-header"><div class="card-title">⊡ Turnuva Briketi</div><span style="font-size:.7rem;color:var(--text2)">Tek Eleme</span></div>';
+    html += '<div style="overflow-x:auto"><div class="bracket-wrapper">';
+    rounds.forEach((round, ri) => {
+      html += `<div class="bracket-round"><div class="bracket-round-header">${names[ri]}</div><div class="bracket-matches-col">`;
+      round.forEach(m => { html += drawBracketMatchReadOnly(m); });
+      html += '</div></div>';
+    });
+    html += '</div></div>';
+
+    // Third place
+    if (br.thirdPlace && rounds.length >= 2) {
+      html += `<div style="margin-top:1rem"><div class="bracket-section-title" style="margin-bottom:.5rem">3. lük Maçı</div>
+        <div class="bracket-wrapper"><div class="bracket-round">
+          <div class="bracket-round-header">3. lük</div>
+          <div class="bracket-matches-col">${drawBracketMatchReadOnly(br.thirdPlace)}</div>
+        </div></div></div>`;
+    }
+    html += '</div>';
+
+  } else {
+    // Double elimination
+    html += '<div class="card"><div class="card-header"><div class="card-title">⊡ Turnuva Briketi</div><span style="font-size:.7rem;color:var(--text2)">Çift Eleme</span></div>';
+    html += '<div style="overflow-x:auto"><div class="double-elim-container">';
+
+    const wR = br.winners || [];
+    const lR = (br.losers || []).filter(r => r.length > 0);
+
+    if (wR.length) {
+      html += '<div><div class="bracket-section-title">⬆ Kazananlar Braketi</div><div class="bracket-wrapper">';
+      wR.forEach((round, ri) => {
+        const names = roundNames(wR.length);
+        html += `<div class="bracket-round"><div class="bracket-round-header">${names[ri]}</div><div class="bracket-matches-col">`;
+        round.forEach(m => { html += drawBracketMatchReadOnly(m); });
+        html += '</div></div>';
+      });
+      html += '</div></div>';
+    }
+
+    if (lR.length) {
+      html += '<div><div class="bracket-section-title">⬇ Kaybedenler Braketi</div><div class="bracket-wrapper">';
+      lR.forEach((round, ri) => {
+        html += `<div class="bracket-round"><div class="bracket-round-header">K-Tur ${ri+1}</div><div class="bracket-matches-col">`;
+        round.forEach(m => { html += drawBracketMatchReadOnly(m); });
+        html += '</div></div>';
+      });
+      html += '</div></div>';
+    }
+
+    if (br.grandFinal) {
+      html += '<div><div class="bracket-section-title">🏆 Büyük Final</div><div class="bracket-wrapper">';
+      html += `<div class="bracket-round"><div class="bracket-round-header">Final</div><div class="bracket-matches-col">${drawBracketMatchReadOnly(br.grandFinal)}</div></div>`;
+      if (br.grandFinalReset && br.grandFinalReset.player1) {
+        html += `<div class="bracket-round"><div class="bracket-round-header">Reset</div><div class="bracket-matches-col">${drawBracketMatchReadOnly(br.grandFinalReset)}</div></div>`;
+      }
+      html += '</div></div>';
+    }
+
+    html += '</div></div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+/* ===================== STATS ===================== */
+function getAllBracketMatches() {
+  if (!App.bracket) return [];
+  const ms = [];
+  (App.bracket.winners||[]).forEach(r => r.forEach(m => ms.push(m)));
+  if (App.bracket.losers) App.bracket.losers.forEach(r => r.forEach(m => ms.push(m)));
+  if (App.bracket.grandFinal) ms.push(App.bracket.grandFinal);
+  if (App.bracket.grandFinalReset) ms.push(App.bracket.grandFinalReset);
+  if (App.bracket.thirdPlace) ms.push(App.bracket.thirdPlace);
+  return ms;
+}
+
+function computeStatsFromMatches(matches) {
+  const stats = {};
+  const init = p => { if (!stats[p]) stats[p] = { wins:0, losses:0, legsWon:0, legsLost:0, totalDarts:0, totalKalan:0, avgCount:0, s180:0, highOut:0, avg:0 }; };
+  matches.forEach(m => {
+    if (!m.winner || m.player1==='BYE' || m.player2==='BYE') return;
+    const {player1:p1,player2:p2,score1,score2,winner,legs} = m;
+    init(p1); init(p2);
+    const s1=stats[p1], s2=stats[p2];
+    (legs||[]).forEach(leg => {
+      s1.s180 += leg.p1Stats?.s180||0; s2.s180 += leg.p2Stats?.s180||0;
+      if ((leg.p1Stats?.highOut||0)>s1.highOut) s1.highOut=leg.p1Stats.highOut;
+      if ((leg.p2Stats?.highOut||0)>s2.highOut) s2.highOut=leg.p2Stats.highOut;
+      const ok1=leg.p1Stats?.okSayisi||0, ok2=leg.p2Stats?.okSayisi||0;
+      if(ok1>0){s1.totalDarts+=ok1;s1.totalKalan+=(leg.p1Stats?.kalan||0);s1.avgCount++;}
+      if(ok2>0){s2.totalDarts+=ok2;s2.totalKalan+=(leg.p2Stats?.kalan||0);s2.avgCount++;}
+    });
+    s1.legsWon+=score1; s1.legsLost+=score2;
+    s2.legsWon+=score2; s2.legsLost+=score1;
+    if(winner===p1){s1.wins++;s2.losses++;}else{s2.wins++;s1.losses++;}
+  });
+  Object.values(stats).forEach(s => {
+    s.avg = (s.totalDarts>0&&s.avgCount>0) ? +(((s.avgCount*501-s.totalKalan)/s.totalDarts)*3).toFixed(2) : 0;
+  });
+  return stats;
+}
+
+function getTournamentRank(name) {
+  if (!App.bracket) return 999;
+  if (App.champion === name) return 1;
+  const gfr = App.bracket.grandFinalReset, gf = App.bracket.grandFinal;
+  const finalMatch = (gfr&&gfr.winner)?gfr:gf;
+  if (finalMatch&&finalMatch.winner&&finalMatch.winner!==name&&(finalMatch.player1===name||finalMatch.player2===name)) return 2;
+  if ((App.config.tournamentType||'single')==='single') {
+    const wR=App.bracket.winners||[], last=wR[wR.length-1];
+    if(last?.length===1&&last[0].winner){const fm=last[0];if((fm.player1===fm.winner?fm.player2:fm.player1)===name)return 2;}
+    const tp=App.bracket.thirdPlace;
+    if(tp&&tp.winner===name) return 3;
+    if(tp&&tp.winner&&tp.winner!==name&&(tp.player1===name||tp.player2===name)) return 4;
+  }
+  return 999;
+}
+
+function buildStatsTable(players, statsMap, title, showRank, matches) {
+  const pct=(w,t)=>t>0?Math.round(w/t*100):0;
+  const st=p=>statsMap[p]||{wins:0,losses:0,legsWon:0,legsLost:0,avg:0,s180:0,highOut:0};
+  const h2hWinner=(a,b)=>{for(const m of matches){if(!m.winner||m.winner==='BYE')continue;if((m.player1===a&&m.player2===b)||(m.player1===b&&m.player2===a))return m.winner;}return null;};
+  const baseSort=(a,b)=>{const sa=st(a),sb=st(b);if(sb.wins!==sa.wins)return sb.wins-sa.wins;if(sb.legsWon!==sa.legsWon)return sb.legsWon-sa.legsWon;const hw=h2hWinner(a,b);return hw===a?-1:hw===b?1:0;};
+  const pool = [...players].filter(p=>statsMap[p]);
+  let sorted;
+  if (showRank && App.bracket) {
+    const fixed=[];
+    if(App.champion&&statsMap[App.champion]) fixed.push(App.champion);
+    const fl=(()=>{if((App.config.tournamentType||'single')==='single'){const wR=App.bracket.winners||[],lr=wR[wR.length-1];if(lr?.length===1&&lr[0].winner){const fm=lr[0];return fm.player1===fm.winner?fm.player2:fm.player1;}}else{const gr=App.bracket.grandFinalReset,gf=App.bracket.grandFinal,fm=(gr&&gr.winner)?gr:gf;if(fm&&fm.winner)return fm.player1===fm.winner?fm.player2:fm.player1;}return null;})();
+    if(fl&&statsMap[fl]&&!fixed.includes(fl)) fixed.push(fl);
+    const tp=App.bracket.thirdPlace;
+    if(tp&&tp.winner&&tp.winner!=='BYE'&&statsMap[tp.winner]&&!fixed.includes(tp.winner)) fixed.push(tp.winner);
+    const fixedSet=new Set(fixed);
+    sorted=[...fixed,...pool.filter(p=>!fixedSet.has(p)).sort(baseSort)];
+  } else {
+    sorted=pool.sort(baseSort);
+  }
+  const medal=r=>r===1?'🥇':r===2?'🥈':r===3?'🥉':'';
+  const rows=sorted.map((p,i)=>{
+    const s=st(p),total=s.wins+s.losses;
+    const rv=showRank&&App.bracket?getTournamentRank(p):999;
+    const med=medal(rv);
+    return `<tr class="${App.champion===p?'champ-row':''}">
+      <td style="color:var(--accent);font-weight:bold">${i+1}</td>
+      <td>${esc(p)}${med?' '+med:''}</td>
+      <td>${total}</td><td>${s.wins}</td><td>${s.losses}</td>
+      <td>${s.legsWon}</td><td>${s.legsLost}</td>
+      <td>${total?pct(s.wins,total)+'%':'—'}</td>
+      <td>${s.avg>0?s.avg.toFixed(2):'—'}</td>
+      <td>${s.highOut||'—'}</td><td>${s.s180}</td>
+    </tr>`;
+  }).join('');
+
+  // Sub-tables
+  const allHO=[];
+  matches.forEach(m=>{(m.legs||[]).forEach(leg=>{const h1=leg.p1Stats?.highOut||0,h2=leg.p2Stats?.highOut||0;if(h1>0)allHO.push({player:m.player1,val:h1});if(h2>0)allHO.push({player:m.player2,val:h2});});});
+  allHO.sort((a,b)=>b.val-a.val);
+  const hoRows=allHO.map((e,i)=>`<tr><td style="color:var(--accent);font-size:.78rem">${i+1}</td><td>${esc(e.player)}</td><td style="color:var(--accent3);font-weight:bold">${e.val}</td></tr>`).join('');
+
+  const withAvg=sorted.filter(p=>st(p).avg>0).sort((a,b)=>st(b).avg-st(a).avg);
+  const avgRows=withAvg.map((p,i)=>{const s=st(p);return`<tr><td style="color:var(--accent);font-size:.78rem">${i+1}</td><td>${esc(p)}</td><td style="color:var(--accent);font-weight:bold">${s.avg.toFixed(2)}</td><td>${s.wins}/${s.wins+s.losses}</td></tr>`;}).join('');
+
+  const with180=sorted.filter(p=>st(p).s180>0).sort((a,b)=>st(b).s180-st(a).s180);
+  const s180Rows=with180.map((p,i)=>`<tr><td style="color:var(--accent);font-size:.78rem">${i+1}</td><td>${esc(p)}</td><td style="color:var(--accent3);font-weight:bold">${st(p).s180}</td></tr>`).join('');
+
+  return `
+    <div class="card" style="margin-bottom:.8rem">
+      <div class="card-header"><div class="card-title">${title}</div><span style="font-size:.7rem;color:var(--text2)">${sorted.length} oyuncu</span></div>
+      <div style="overflow-x:auto"><table class="stats-table">
+        <thead><tr><th>#</th><th>Oyuncu</th><th>O</th><th>G</th><th>M</th><th>A.Leg</th><th>V.Leg</th><th>G%</th><th>Ok Ort.</th><th>H.Out</th><th>180</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="11" style="text-align:center;color:var(--text2)">Henüz maç oynanmadı</td></tr>'}</tbody>
+      </table></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.8rem;margin-bottom:1rem">
+      <div class="card">
+        <div class="card-header"><div class="card-title">🎯 Ok Ortalaması</div></div>
+        ${withAvg.length?`<div style="overflow-x:auto"><table class="stats-table"><thead><tr><th>#</th><th>Oyuncu</th><th>Ort.</th><th>G/T</th></tr></thead><tbody>${avgRows}</tbody></table></div>`:'<div class="empty-state" style="padding:.7rem;font-size:.78rem"><p>Veri yok</p></div>'}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">💥 180</div></div>
+        ${with180.length?`<div style="overflow-x:auto"><table class="stats-table"><thead><tr><th>#</th><th>Oyuncu</th><th>180</th></tr></thead><tbody>${s180Rows}</tbody></table></div>`:'<div class="empty-state" style="padding:.7rem;font-size:.78rem"><p>Veri yok</p></div>'}
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">🔥 High Out</div><span style="font-size:.68rem;color:var(--text2)">${allHO.length} kayıt</span></div>
+        ${allHO.length?`<div style="overflow-x:auto"><table class="stats-table"><thead><tr><th>#</th><th>Oyuncu</th><th>H.Out</th></tr></thead><tbody>${hoRows}</tbody></table></div>`:'<div class="empty-state" style="padding:.7rem;font-size:.78rem"><p>Veri yok</p></div>'}
+      </div>
+    </div>`;
+}
+
+function renderStats() {
+  const el = document.getElementById('view-stats');
+  const players = App.players || [];
+  if (!players.length) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">📊</div><p>Henüz istatistik yok</p></div>';
+    return;
+  }
+
+  const groupMatches   = [];
+  (App.groups||[]).forEach(g => (g.matches||[]).forEach(m => { if(m.winner) groupMatches.push(m); }));
+  const bracketMatches = getAllBracketMatches().filter(m => m.winner && m.winner!=='BYE' && m.player1 && m.player1!=='BYE' && m.player2 && m.player2!=='BYE');
+
+  const hasGroups  = groupMatches.length > 0;
+  const hasBracket = bracketMatches.length > 0;
+
+  // Mode tabs
+  const tabs = [];
+  if (hasGroups)               tabs.push({key:'groups',  label:'⊞ Gruplar'});
+  if (hasBracket)              tabs.push({key:'bracket', label:'⚔ Turnuva'});
+  if (hasGroups && hasBracket) tabs.push({key:'total',   label:'📊 Toplam'});
+
+  if (!tabs.find(t => t.key === _statsMode)) _statsMode = tabs.length ? tabs[tabs.length-1].key : 'groups';
+
+  const tabsHtml = tabs.map(t => `<button class="mode-tab-btn${_statsMode===t.key?' active':''}" onclick="_statsMode='${t.key}';renderStats()">${t.label}</button>`).join('');
+
+  let html = `<div class="mode-tabs">${tabsHtml}</div>`;
+
+  if (_statsMode === 'groups' && hasGroups) {
+    const gs = computeStatsFromMatches(groupMatches);
+    html += buildStatsTable(players, gs, '⊞ Grup Maçları', false, groupMatches);
+  } else if (_statsMode === 'bracket' && hasBracket) {
+    const bs = computeStatsFromMatches(bracketMatches);
+    html += buildStatsTable(players, bs, '⚔ Turnuva Maçları', true, bracketMatches);
+  } else if (_statsMode === 'total') {
+    const allMatches = [...groupMatches, ...bracketMatches];
+    const ts = computeStatsFromMatches(allMatches);
+    html += `<div style="font-size:.74rem;color:var(--text2);background:var(--bg1);padding:.45rem .8rem;border-radius:4px;border:1px solid var(--border);margin-bottom:.7rem">
+      📊 Toplam: <strong>${groupMatches.length}</strong> grup + <strong>${bracketMatches.length}</strong> turnuva maçı
+    </div>`;
+    html += buildStatsTable(players, ts, '📊 Tüm Maçlar', true, allMatches);
+  } else {
+    html += '<div class="empty-state"><div class="icon">📊</div><p>Henüz maç oynanmadı</p></div>';
+  }
+
+  el.innerHTML = html;
+}
+</script>
+
+<!-- Logo injection: set logo src from admin panel's embedded base64 -->
+<script>
+(function(){
+  // Small dartboard SVG as default; replaced by inline script below if needed
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+    <circle cx="50" cy="50" r="48" fill="#1a1a1a" stroke="#e03030" stroke-width="3"/>
+    <circle cx="50" cy="50" r="36" fill="#fff" stroke="#333" stroke-width="1"/>
+    <circle cx="50" cy="50" r="24" fill="#e03030" stroke="#333" stroke-width="1"/>
+    <circle cx="50" cy="50" r="12" fill="#fff" stroke="#333" stroke-width="1"/>
+    <circle cx="50" cy="50" r="5"  fill="#e03030"/>
+  </svg>`;
+  const logo = document.getElementById('app-logo');
+  logo.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+})();
+</script>
+</body>
+</html>
